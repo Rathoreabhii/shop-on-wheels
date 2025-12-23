@@ -1,11 +1,16 @@
-import { Link, useLocation } from "react-router-dom";
-import { Truck, Menu, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Truck, Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -15,8 +20,18 @@ const Navbar = () => {
     { path: "/suppliers", label: "Suppliers" },
   ];
 
-  const showAuthLinks = location.pathname === "/" || location.pathname === "/login";
-  const showDashboardLinks = !showAuthLinks;
+  const isPublicPage = location.pathname === "/" || location.pathname === "/auth";
+  const showDashboardLinks = user && !isPublicPage;
+
+  const handleLogout = async () => {
+    await signOut();
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out.",
+    });
+    navigate("/");
+    setIsOpen(false);
+  };
 
   return (
     <nav className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -47,18 +62,19 @@ const Navbar = () => {
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center gap-3">
-            {showAuthLinks ? (
+            {!user ? (
               <>
                 <Button variant="ghost" asChild>
-                  <Link to="/login">Login</Link>
+                  <Link to="/auth">Login</Link>
                 </Button>
                 <Button variant="accent" asChild>
                   <Link to="/book-ride">Book a Vehicle</Link>
                 </Button>
               </>
             ) : (
-              <Button variant="ghost" asChild>
-                <Link to="/">Logout</Link>
+              <Button variant="ghost" onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
               </Button>
             )}
           </div>
@@ -90,10 +106,10 @@ const Navbar = () => {
                   {link.label}
                 </Link>
               ))}
-              {showAuthLinks ? (
+              {!user ? (
                 <>
                   <Link
-                    to="/login"
+                    to="/auth"
                     onClick={() => setIsOpen(false)}
                     className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary"
                   >
@@ -108,13 +124,13 @@ const Navbar = () => {
                   </Link>
                 </>
               ) : (
-                <Link
-                  to="/"
-                  onClick={() => setIsOpen(false)}
-                  className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary"
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary text-left flex items-center gap-2"
                 >
+                  <LogOut className="w-4 h-4" />
                   Logout
-                </Link>
+                </button>
               )}
             </div>
           </div>

@@ -1,62 +1,124 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Truck, Mail, Phone, Lock, Eye, EyeOff, User } from "lucide-react";
+import { Truck, Mail, Lock, Eye, EyeOff, User, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { z } from "zod";
 
-const Login = () => {
+const loginSchema = z.object({
+  email: z.string().trim().email("Please enter a valid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const signupSchema = z.object({
+  shopName: z.string().trim().min(1, "Shop name is required").max(100, "Shop name too long"),
+  email: z.string().trim().email("Please enter a valid email address"),
+  phone: z.string().trim().min(10, "Please enter a valid phone number").max(15, "Phone number too long"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
+    shopName: "",
     email: "",
     phone: "",
     password: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, signUp, signIn } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard");
+    }
+  }, [user, navigate]);
+
+  const validateForm = () => {
+    try {
+      if (isLogin) {
+        loginSchema.parse({ email: formData.email, password: formData.password });
+      } else {
+        signupSchema.parse(formData);
+      }
+      setErrors({});
+      return true;
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        error.errors.forEach((err) => {
+          if (err.path[0]) {
+            newErrors[err.path[0] as string] = err.message;
+          }
+        });
+        setErrors(newErrors);
+      }
+      return false;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Basic validation
-    if (!formData.email && !formData.phone) {
-      toast({
-        title: "Error",
-        description: "Please enter email or phone number",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!validateForm()) return;
     
-    if (!formData.password || formData.password.length < 6) {
-      toast({
-        title: "Error",
-        description: "Password must be at least 6 characters",
-        variant: "destructive",
-      });
-      return;
-    }
+    setIsSubmitting(true);
 
-    if (!isLogin && !formData.name) {
-      toast({
-        title: "Error",
-        description: "Please enter your shop name",
-        variant: "destructive",
-      });
-      return;
-    }
+    try {
+      if (isLogin) {
+        const { error } = await signIn(formData.email, formData.password);
+        
+        if (error) {
+          let message = error.message;
+          if (error.message.includes("Invalid login credentials")) {
+            message = "Invalid email or password. Please try again.";
+          }
+          toast({
+            title: "Login failed",
+            description: message,
+            variant: "destructive",
+          });
+          return;
+        }
 
-    // Mock successful login/register
-    toast({
-      title: isLogin ? "Welcome back!" : "Account created!",
-      description: isLogin
-        ? "You have successfully logged in."
-        : "Your account has been created successfully.",
-    });
-    
-    navigate("/dashboard");
+        toast({
+          title: "Welcome back!",
+          description: "You have successfully logged in.",
+        });
+        navigate("/dashboard");
+      } else {
+        const { error } = await signUp(formData.email, formData.password, formData.shopName, formData.phone);
+        
+        if (error) {
+          let message = error.message;
+          if (error.message.includes("User already registered")) {
+            message = "An account with this email already exists. Please login instead.";
+          }
+          toast({
+            title: "Registration failed",
+            description: message,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        toast({
+          title: "Account created!",
+          description: "Your account has been created successfully.",
+        });
+        navigate("/dashboard");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -87,7 +149,8 @@ const Login = () => {
           {/* Toggle */}
           <div className="flex p-1 bg-secondary rounded-lg mb-8">
             <button
-              onClick={() => setIsLogin(true)}
+              type="button"
+              onClick={() => { setIsLogin(true); setErrors({}); }}
               className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all ${
                 isLogin
                   ? "bg-card text-foreground shadow-sm"
@@ -97,7 +160,8 @@ const Login = () => {
               Login
             </button>
             <button
-              onClick={() => setIsLogin(false)}
+              type="button"
+              onClick={() => { setIsLogin(false); setErrors({}); }}
               className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all ${
                 !isLogin
                   ? "bg-card text-foreground shadow-sm"
@@ -118,11 +182,12 @@ const Login = () => {
                   <Input
                     type="text"
                     placeholder="Enter your shop name"
-                    className="pl-10 h-12"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className={`pl-10 h-12 ${errors.shopName ? "border-destructive" : ""}`}
+                    value={formData.shopName}
+                    onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
                   />
                 </div>
+                {errors.shopName && <p className="text-xs text-destructive">{errors.shopName}</p>}
               </div>
             )}
 
@@ -133,26 +198,30 @@ const Login = () => {
                 <Input
                   type="email"
                   placeholder="you@example.com"
-                  className="pl-10 h-12"
+                  className={`pl-10 h-12 ${errors.email ? "border-destructive" : ""}`}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
               </div>
+              {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Phone Number</label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  type="tel"
-                  placeholder="+91 98765 43210"
-                  className="pl-10 h-12"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
+            {!isLogin && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Phone Number</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    type="tel"
+                    placeholder="+91 98765 43210"
+                    className={`pl-10 h-12 ${errors.phone ? "border-destructive" : ""}`}
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+                {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
               </div>
-            </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Password</label>
@@ -161,7 +230,7 @@ const Login = () => {
                 <Input
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
-                  className="pl-10 pr-10 h-12"
+                  className={`pl-10 pr-10 h-12 ${errors.password ? "border-destructive" : ""}`}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
@@ -173,18 +242,17 @@ const Login = () => {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
             </div>
 
-            {isLogin && (
-              <div className="text-right">
-                <button type="button" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </button>
-              </div>
-            )}
-
-            <Button type="submit" variant="accent" size="lg" className="w-full">
-              {isLogin ? "Sign In" : "Create Account"}
+            <Button 
+              type="submit" 
+              variant="accent" 
+              size="lg" 
+              className="w-full"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
             </Button>
           </form>
 
@@ -232,4 +300,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Auth;
