@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Bike, Truck, Package, ArrowRight, Calculator } from "lucide-react";
+import { Bike, Truck, Package, ArrowRight, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Navbar from "@/components/Navbar";
 import VehicleCard from "@/components/VehicleCard";
 import { vehicles } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const vehicleIcons = {
   auto: Bike,
@@ -14,12 +16,21 @@ const vehicleIcons = {
   "mini-truck": Package,
 };
 
+// Mock driver data for simulation
+const mockDrivers = [
+  { name: "Ramesh Kumar", phone: "+91 98765 43210", vehicleNumber: "DL 4C AB 1234", rating: 4.8 },
+  { name: "Suresh Sharma", phone: "+91 98765 54321", vehicleNumber: "DL 3C XY 5678", rating: 4.6 },
+  { name: "Vikram Singh", phone: "+91 98765 65432", vehicleNumber: "DL 2C MN 9012", rating: 4.9 },
+];
+
 const BookRide = () => {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Static fare calculation (mock)
   const calculateFare = () => {
@@ -35,7 +46,7 @@ const BookRide = () => {
 
   const fareDetails = calculateFare();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!pickup.trim()) {
@@ -65,12 +76,57 @@ const BookRide = () => {
       return;
     }
 
-    toast({
-      title: "Ride requested!",
-      description: "Finding nearby drivers for you...",
-    });
+    if (!user) {
+      toast({
+        title: "Please login",
+        description: "You need to be logged in to book a ride",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
 
-    navigate("/ride-status");
+    setIsSubmitting(true);
+
+    try {
+      // Get random driver for simulation
+      const driver = mockDrivers[Math.floor(Math.random() * mockDrivers.length)];
+      const vehicleName = vehicles.find(v => v.id === selectedVehicle)?.name || selectedVehicle;
+
+      const { data, error } = await supabase
+        .from("rides")
+        .insert({
+          user_id: user.id,
+          pickup: pickup.trim(),
+          drop_location: drop.trim(),
+          vehicle_type: vehicleName,
+          fare: fareDetails?.fare || 0,
+          status: "requested",
+          driver_name: driver.name,
+          driver_phone: driver.phone,
+          vehicle_number: driver.vehicleNumber,
+          driver_rating: driver.rating,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: "Ride requested!",
+        description: "Finding nearby drivers for you...",
+      });
+
+      navigate("/ride-status", { state: { rideId: data.id } });
+    } catch (error: any) {
+      toast({
+        title: "Failed to book ride",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -173,10 +229,25 @@ const BookRide = () => {
               size="xl"
               className="w-full animate-slide-up"
               style={{ animationDelay: "100ms" }}
+              disabled={isSubmitting}
             >
-              Request Ride
-              <ArrowRight className="w-5 h-5" />
+              {isSubmitting ? "Booking..." : "Request Ride"}
+              {!isSubmitting && <ArrowRight className="w-5 h-5" />}
             </Button>
+
+            {!user && (
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                You'll need to{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/auth")}
+                  className="text-primary hover:underline"
+                >
+                  login or create an account
+                </button>{" "}
+                to book a ride
+              </p>
+            )}
           </form>
         </div>
       </main>

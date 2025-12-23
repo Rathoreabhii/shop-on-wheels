@@ -1,12 +1,55 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Truck, Package, CheckCircle, Clock, Plus, History, Users, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import StatsCard from "@/components/StatsCard";
-import { mockRideStats, mockCurrentRide } from "@/data/mockData";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const Dashboard = () => {
-  const hasActiveRide = mockCurrentRide.status !== "completed";
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Fetch user's rides
+  const { data: rides = [] } = useQuery({
+    queryKey: ["rides", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("rides")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  // Fetch user's profile
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const totalRides = rides.length;
+  const completedRides = rides.filter(r => r.status === "completed").length;
+  const activeRides = rides.filter(r => r.status !== "completed");
+  const activeRide = activeRides[0];
+  const totalSpent = rides.reduce((sum, r) => sum + (r.fare || 0), 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -16,7 +59,7 @@ const Dashboard = () => {
         {/* Welcome Section */}
         <div className="mb-8 animate-fade-in">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            Welcome, Shopkeeper 👋
+            Welcome{profile?.shop_name ? `, ${profile.shop_name}` : ""} 👋
           </h1>
           <p className="mt-1 text-muted-foreground">
             Manage your transport bookings and track deliveries
@@ -28,7 +71,7 @@ const Dashboard = () => {
           <div className="animate-slide-up" style={{ animationDelay: "0ms" }}>
             <StatsCard
               title="Total Rides"
-              value={mockRideStats.totalRides}
+              value={totalRides}
               icon={Package}
               variant="primary"
             />
@@ -36,31 +79,30 @@ const Dashboard = () => {
           <div className="animate-slide-up" style={{ animationDelay: "50ms" }}>
             <StatsCard
               title="Completed Rides"
-              value={mockRideStats.completedRides}
+              value={completedRides}
               icon={CheckCircle}
               variant="success"
             />
           </div>
           <div className="animate-slide-up" style={{ animationDelay: "100ms" }}>
             <StatsCard
-              title="Active Ride"
-              value={mockRideStats.activeRide}
+              title="Active Rides"
+              value={activeRides.length}
               icon={Clock}
               variant="accent"
             />
           </div>
           <div className="animate-slide-up" style={{ animationDelay: "150ms" }}>
             <StatsCard
-              title="Money Saved"
-              value={`₹${mockRideStats.savedAmount}`}
+              title="Total Spent"
+              value={`₹${totalSpent}`}
               icon={Truck}
-              trend="+12% this month"
             />
           </div>
         </div>
 
         {/* Active Ride Card */}
-        {hasActiveRide && (
+        {activeRide && (
           <div className="mb-8 p-6 rounded-xl bg-accent/5 border border-accent/20 animate-fade-in">
             <div className="flex items-start justify-between flex-wrap gap-4">
               <div>
@@ -69,17 +111,15 @@ const Dashboard = () => {
                   <span className="text-sm font-medium text-accent">Active Ride</span>
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-1">
-                  {mockCurrentRide.pickup} → {mockCurrentRide.drop}
+                  {activeRide.pickup} → {activeRide.drop_location}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {mockCurrentRide.vehicle} • ₹{mockCurrentRide.fare} • ID: {mockCurrentRide.id}
+                  {activeRide.vehicle_type} • ₹{activeRide.fare} • {activeRide.status}
                 </p>
               </div>
-              <Button variant="accent" asChild>
-                <Link to="/ride-status">
-                  Track Ride
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
+              <Button variant="accent" onClick={() => navigate("/ride-status", { state: { rideId: activeRide.id } })}>
+                Track Ride
+                <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
           </div>
