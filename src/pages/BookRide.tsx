@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bike, Truck, Package, ArrowRight, Calculator } from "lucide-react";
+import { Bike, Truck, Package, ArrowRight, Calculator, Loader2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import Navbar from "@/components/Navbar";
 import VehicleCard from "@/components/VehicleCard";
+import PlacesAutocomplete from "@/components/PlacesAutocomplete";
 import { vehicles } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,25 +23,70 @@ const mockDrivers = [
   { name: "Vikram Singh", phone: "+91 98765 65432", vehicleNumber: "DL 2C MN 9012", rating: 4.9 },
 ];
 
+interface DistanceResult {
+  distance: { value: number; text: string };
+  duration: { value: number; text: string };
+  originAddress: string;
+  destinationAddress: string;
+}
+
 const BookRide = () => {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [distanceResult, setDistanceResult] = useState<DistanceResult | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Static fare calculation (mock)
+  // Calculate distance when both locations are set
+  useEffect(() => {
+    const calculateDistance = async () => {
+      if (pickup.length < 5 || drop.length < 5) {
+        setDistanceResult(null);
+        return;
+      }
+
+      setIsCalculating(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('calculate-distance', {
+          body: { origin: pickup, destination: drop }
+        });
+
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
+
+        setDistanceResult(data);
+      } catch (err: any) {
+        console.error('Distance calculation failed:', err);
+        setDistanceResult(null);
+      } finally {
+        setIsCalculating(false);
+      }
+    };
+
+    // Debounce the calculation
+    const timer = setTimeout(calculateDistance, 500);
+    return () => clearTimeout(timer);
+  }, [pickup, drop]);
+
+  // Calculate fare based on real distance
   const calculateFare = () => {
-    if (!selectedVehicle) return null;
+    if (!selectedVehicle || !distanceResult) return null;
     const vehicle = vehicles.find((v) => v.id === selectedVehicle);
     if (!vehicle) return null;
 
-    // Mock distance calculation (5-15 km)
-    const mockDistance = 8;
-    const fare = vehicle.baseFare + mockDistance * vehicle.perKm;
-    return { fare, distance: mockDistance, baseFare: vehicle.baseFare, perKm: vehicle.perKm };
+    const distance = distanceResult.distance.value;
+    const fare = Math.round(vehicle.baseFare + distance * vehicle.perKm);
+    return { 
+      fare, 
+      distance, 
+      baseFare: vehicle.baseFare, 
+      perKm: vehicle.perKm,
+      duration: distanceResult.duration.text 
+    };
   };
 
   const fareDetails = calculateFare();
@@ -76,6 +121,15 @@ const BookRide = () => {
       return;
     }
 
+    if (!distanceResult) {
+      toast({
+        title: "Calculating distance",
+        description: "Please wait while we calculate the distance",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!user) {
       toast({
         title: "Please login",
@@ -97,8 +151,8 @@ const BookRide = () => {
         .from("rides")
         .insert({
           user_id: user.id,
-          pickup: pickup.trim(),
-          drop_location: drop.trim(),
+          pickup: distanceResult.originAddress || pickup.trim(),
+          drop_location: distanceResult.destinationAddress || drop.trim(),
           vehicle_type: vehicleName,
           fare: fareDetails?.fare || 0,
           status: "requested",
@@ -149,28 +203,42 @@ const BookRide = () => {
               <h2 className="font-semibold text-foreground mb-4">Where to?</h2>
 
               <div className="space-y-4">
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-success" />
-                  <Input
-                    type="text"
-                    placeholder="Pickup Location"
-                    className="pl-10 h-12"
-                    value={pickup}
-                    onChange={(e) => setPickup(e.target.value)}
-                  />
-                </div>
+                <PlacesAutocomplete
+                  value={pickup}
+                  onChange={setPickup}
+                  placeholder="Pickup Location"
+                  icon="pickup"
+                />
 
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-accent" />
-                  <Input
-                    type="text"
-                    placeholder="Drop Location"
-                    className="pl-10 h-12"
-                    value={drop}
-                    onChange={(e) => setDrop(e.target.value)}
-                  />
-                </div>
+                <PlacesAutocomplete
+                  value={drop}
+                  onChange={setDrop}
+                  placeholder="Drop Location"
+                  icon="drop"
+                />
               </div>
+
+              {/* Distance Info */}
+              {(isCalculating || distanceResult) && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  {isCalculating ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Calculating distance...</span>
+                    </div>
+                  ) : distanceResult ? (
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <MapPin className="w-4 h-4" />
+                        <span>{distanceResult.distance.text}</span>
+                      </div>
+                      <span className="text-muted-foreground">
+                        ~{distanceResult.duration.text}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             {/* Vehicle Selection */}
@@ -208,11 +276,15 @@ const BookRide = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      Distance ({fareDetails.distance} km × ₹{fareDetails.perKm})
+                      Distance ({fareDetails.distance.toFixed(1)} km × ₹{fareDetails.perKm})
                     </span>
                     <span className="text-foreground">
-                      ₹{fareDetails.distance * fareDetails.perKm}
+                      ₹{Math.round(fareDetails.distance * fareDetails.perKm)}
                     </span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Estimated time</span>
+                    <span>{fareDetails.duration}</span>
                   </div>
                   <div className="pt-3 border-t border-border flex justify-between">
                     <span className="font-semibold text-foreground">Total Estimate</span>
@@ -229,10 +301,19 @@ const BookRide = () => {
               size="xl"
               className="w-full animate-slide-up"
               style={{ animationDelay: "100ms" }}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isCalculating || !distanceResult}
             >
-              {isSubmitting ? "Booking..." : "Request Ride"}
-              {!isSubmitting && <ArrowRight className="w-5 h-5" />}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  Booking...
+                </>
+              ) : (
+                <>
+                  Request Ride
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </Button>
 
             {!user && (

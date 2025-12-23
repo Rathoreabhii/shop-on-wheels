@@ -1,1 +1,13 @@
 project_id = "fcgifqfykyrzggmzicay"
+
+[functions.send-otp]
+verify_jwt = false
+
+[functions.verify-otp]
+verify_jwt = false
+
+[functions.calculate-distance]
+verify_jwt = false
+
+[functions.places-autocomplete]
+verify_jwt = false
