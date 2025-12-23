@@ -1,0 +1,156 @@
+import { Link } from "react-router-dom";
+import { MapPin, Phone, Star, Truck, ArrowLeft, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Navbar from "@/components/Navbar";
+import StatusStepper from "@/components/StatusStepper";
+import { mockCurrentRide } from "@/data/mockData";
+
+const RideStatus = () => {
+  const steps = ["Requested", "Driver Assigned", "In Transit", "Completed"];
+
+  // Map status to step number
+  const statusToStep: Record<string, number> = {
+    requested: 1,
+    assigned: 2,
+    in_progress: 3,
+    completed: 4,
+  };
+
+  const currentStep = statusToStep[mockCurrentRide.status] || 1;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto">
+          {/* Back Button */}
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </Link>
+
+          {/* Header */}
+          <div className="mb-8 animate-fade-in">
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Ride Status</h1>
+              {currentStep === 4 && (
+                <span className="px-3 py-1 text-xs font-medium bg-success/10 text-success rounded-full flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" />
+                  Completed
+                </span>
+              )}
+            </div>
+            <p className="text-muted-foreground">Booking ID: {mockCurrentRide.id}</p>
+          </div>
+
+          {/* Status Stepper */}
+          <div className="p-6 rounded-xl bg-card border border-border shadow-card mb-6 animate-slide-up">
+            <StatusStepper currentStep={currentStep} steps={steps} />
+          </div>
+
+          {/* Booking Details */}
+          <div
+            className="p-6 rounded-xl bg-card border border-border shadow-card mb-6 animate-slide-up"
+            style={{ animationDelay: "50ms" }}
+          >
+            <h2 className="font-semibold text-foreground mb-4">Booking Details</h2>
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
+                  <div className="w-2.5 h-2.5 rounded-full bg-success" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Pickup</p>
+                  <p className="font-medium text-foreground">{mockCurrentRide.pickup}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="w-4 h-4 text-accent" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Drop</p>
+                  <p className="font-medium text-foreground">{mockCurrentRide.drop}</p>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-border flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Truck className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Vehicle</p>
+                    <p className="font-medium text-foreground">{mockCurrentRide.vehicle}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground mb-0.5">Fare</p>
+                  <p className="text-xl font-bold text-primary">₹{mockCurrentRide.fare}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Driver Info */}
+          {currentStep >= 2 && (
+            <div
+              className="p-6 rounded-xl bg-card border border-border shadow-card animate-scale-in"
+            >
+              <h2 className="font-semibold text-foreground mb-4">Driver Information</h2>
+
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-xl font-bold text-primary">
+                    {mockCurrentRide.driver.name.charAt(0)}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-foreground">{mockCurrentRide.driver.name}</h3>
+                    <span className="px-2 py-0.5 text-xs font-medium bg-success/10 text-success rounded-full flex items-center gap-1">
+                      <Star className="w-3 h-3 fill-current" />
+                      {mockCurrentRide.driver.rating}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {mockCurrentRide.driver.vehicleNumber}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-border">
+                <Button variant="accent" className="w-full" asChild>
+                  <a href={`tel:${mockCurrentRide.driver.phone}`}>
+                    <Phone className="w-4 h-4" />
+                    Call Driver
+                  </a>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="mt-6 flex gap-3">
+            <Button variant="outline" className="flex-1" asChild>
+              <Link to="/dashboard">Back to Dashboard</Link>
+            </Button>
+            {currentStep === 4 && (
+              <Button variant="accent" className="flex-1" asChild>
+                <Link to="/book-ride">Book Another Ride</Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default RideStatus;
