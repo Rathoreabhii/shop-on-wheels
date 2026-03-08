@@ -99,24 +99,27 @@ export const mockSuppliers = [
 
 export const vehicles = [
   {
-    id: "auto",
-    name: "Auto",
-    baseFare: 80,
-    perKm: 12,
-    capacity: "Up to 200 kg",
+    id: "bike",
+    name: "Bike",
+    baseFare: 35,
+    perKm: 9,
+    waitingPerMin: 1,
+    capacity: "Up to 20 kg",
   },
   {
     id: "tempo",
-    name: "Tempo",
-    baseFare: 150,
-    perKm: 18,
-    capacity: "Up to 500 kg",
+    name: "Tempo / Auto Cargo",
+    baseFare: 80,
+    perKm: 16,
+    waitingPerMin: 2,
+    capacity: "200–500 kg",
   },
   {
     id: "mini-truck",
     name: "Mini Truck",
-    baseFare: 300,
+    baseFare: 250,
     perKm: 25,
-    capacity: "Up to 1000 kg",
+    waitingPerMin: 3,
+    capacity: "500–1000 kg",
   },
 ];
