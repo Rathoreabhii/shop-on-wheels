@@ -5,53 +5,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const googleMapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
-
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { input, sessionToken } = await req.json();
+    const { input } = await req.json();
 
-    if (!input) {
+    if (!input || input.length < 3) {
       return new Response(
         JSON.stringify({ predictions: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Places autocomplete for: "${input}"`);
+    console.log(`Nominatim autocomplete for: "${input}"`);
 
-    // Use Google Places Autocomplete API
-    const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
-    url.searchParams.append('input', input);
-    url.searchParams.append('key', googleMapsApiKey!);
-    url.searchParams.append('components', 'country:in'); // Restrict to India
-    url.searchParams.append('types', 'geocode|establishment');
-    if (sessionToken) {
-      url.searchParams.append('sessiontoken', sessionToken);
-    }
+    const url = new URL('https://nominatim.openstreetmap.org/search');
+    url.searchParams.append('q', input);
+    url.searchParams.append('format', 'json');
+    url.searchParams.append('countrycodes', 'in');
+    url.searchParams.append('limit', '5');
+    url.searchParams.append('addressdetails', '1');
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), {
+      headers: { 'User-Agent': 'LODR-App/1.0' }
+    });
     const data = await response.json();
 
-    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      console.error('Places API error:', data.status, data.error_message);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch suggestions' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const predictions = (data.predictions || []).map((prediction: any) => ({
-      placeId: prediction.place_id,
-      description: prediction.description,
-      mainText: prediction.structured_formatting?.main_text,
-      secondaryText: prediction.structured_formatting?.secondary_text,
-    }));
+    const predictions = data.map((item: any) => {
+      const parts = item.display_name.split(', ');
+      return {
+        placeId: item.place_id.toString(),
+        description: item.display_name,
+        mainText: parts[0] || item.display_name,
+        secondaryText: parts.slice(1, 3).join(', '),
+        lat: parseFloat(item.lat),
+        lon: parseFloat(item.lon),
+      };
+    });
 
     console.log(`Found ${predictions.length} suggestions`);
 
