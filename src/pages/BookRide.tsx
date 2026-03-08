@@ -305,10 +305,24 @@ const BookRide = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Distance ({fareDetails.distance.toFixed(1)} km × ₹{fareDetails.perKm})</span>
-                    <span className="text-foreground">₹{Math.round(fareDetails.distance * fareDetails.perKm)}</span>
+                    <span className="text-foreground">₹{fareDetails.distanceCharge}</span>
+                  </div>
+                  {fareDetails.waitingCharge > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Traffic waiting (~{fareDetails.waitingMins} min × ₹{fareDetails.waitingPerMin})</span>
+                      <span className="text-foreground">₹{fareDetails.waitingCharge}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Platform fee</span>
+                    <span className="text-foreground">₹{fareDetails.platformFee}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GST (5%)</span>
+                    <span className="text-foreground">₹{fareDetails.gst}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Estimated time</span>
+                    <span>Estimated travel time</span>
                     <span>{fareDetails.duration}</span>
                   </div>
                   <div className="pt-3 border-t border-border flex justify-between">
