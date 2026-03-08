@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import BookRide from "./pages/BookRide";
 import RideStatus from "./pages/RideStatus";
 import Suppliers from "./pages/Suppliers";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
