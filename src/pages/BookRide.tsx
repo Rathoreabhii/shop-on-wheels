@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bike, Truck, Package, ArrowRight, Calculator, Loader2, MapPin } from "lucide-react";
+import { Bike, Truck, Package, ArrowRight, Calculator, Loader2, MapPin, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import VehicleCard from "@/components/VehicleCard";
