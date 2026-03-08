@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import BookRide from "./pages/BookRide";
 import RideStatus from "./pages/RideStatus";
 import Suppliers from "./pages/Suppliers";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
               }
             />
             <Route path="/suppliers" element={<Suppliers />} />
+            <Route path="/install" element={<Install />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
