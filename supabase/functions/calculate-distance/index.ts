@@ -5,76 +5,56 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const googleMapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
-
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { origin, destination } = await req.json();
+    const { originLat, originLon, destLat, destLon } = await req.json();
 
-    if (!origin || !destination) {
-      console.error('Origin and destination are required');
+    if (!originLat || !originLon || !destLat || !destLon) {
       return new Response(
-        JSON.stringify({ error: 'Origin and destination are required' }),
+        JSON.stringify({ error: 'Origin and destination coordinates are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Calculating distance from "${origin}" to "${destination}"`);
+    console.log(`OSRM route: (${originLat},${originLon}) -> (${destLat},${destLon})`);
 
-    // Use Google Maps Distance Matrix API
-    const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json');
-    url.searchParams.append('origins', origin);
-    url.searchParams.append('destinations', destination);
-    url.searchParams.append('key', googleMapsApiKey!);
-    url.searchParams.append('units', 'metric');
+    // Use OSRM (free, no API key needed)
+    const url = `https://router.project-osrm.org/route/v1/driving/${originLon},${originLat};${destLon},${destLat}?overview=full&geometries=geojson`;
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url);
     const data = await response.json();
 
-    console.log('Distance Matrix API response:', JSON.stringify(data));
-
-    if (data.status !== 'OK') {
-      console.error('Google Maps API error:', data.status);
-      return new Response(
-        JSON.stringify({ error: 'Failed to calculate distance. Please check addresses.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const element = data.rows[0]?.elements[0];
-    
-    if (element.status !== 'OK') {
-      console.error('Route not found:', element.status);
+    if (data.code !== 'Ok' || !data.routes?.length) {
+      console.error('OSRM error:', data);
       return new Response(
         JSON.stringify({ error: 'Could not find a route between these locations.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const distanceInMeters = element.distance.value;
-    const distanceInKm = distanceInMeters / 1000;
-    const durationInSeconds = element.duration.value;
-    const durationInMinutes = Math.ceil(durationInSeconds / 60);
+    const route = data.routes[0];
+    const distanceInKm = route.distance / 1000;
+    const durationInMinutes = Math.ceil(route.duration / 60);
 
-    console.log(`Distance: ${distanceInKm} km, Duration: ${durationInMinutes} minutes`);
+    console.log(`Distance: ${distanceInKm.toFixed(1)} km, Duration: ${durationInMinutes} min`);
 
     return new Response(
       JSON.stringify({
         distance: {
-          value: distanceInKm,
-          text: element.distance.text,
+          value: Math.round(distanceInKm * 10) / 10,
+          text: `${distanceInKm.toFixed(1)} km`,
         },
         duration: {
           value: durationInMinutes,
-          text: element.duration.text,
+          text: durationInMinutes < 60
+            ? `${durationInMinutes} mins`
+            : `${Math.floor(durationInMinutes / 60)}h ${durationInMinutes % 60}m`,
         },
-        originAddress: data.origin_addresses[0],
-        destinationAddress: data.destination_addresses[0],
+        routeGeometry: route.geometry,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

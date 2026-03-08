@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bike, Truck, Package, ArrowRight, Calculator, Loader2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import VehicleCard from "@/components/VehicleCard";
 import PlacesAutocomplete from "@/components/PlacesAutocomplete";
+import RouteMap from "@/components/RouteMap";
 import { vehicles } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,7 +17,6 @@ const vehicleIcons = {
   "mini-truck": Package,
 };
 
-// Mock driver data for simulation
 const mockDrivers = [
   { name: "Ramesh Kumar", phone: "+91 98765 43210", vehicleNumber: "DL 4C AB 1234", rating: 4.8 },
   { name: "Suresh Sharma", phone: "+91 98765 54321", vehicleNumber: "DL 3C XY 5678", rating: 4.6 },
@@ -26,13 +26,20 @@ const mockDrivers = [
 interface DistanceResult {
   distance: { value: number; text: string };
   duration: { value: number; text: string };
-  originAddress: string;
-  destinationAddress: string;
+  routeGeometry?: any;
+}
+
+interface Coords {
+  lat: number;
+  lon: number;
 }
 
 const BookRide = () => {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
+  const [pickupCoords, setPickupCoords] = useState<Coords | null>(null);
+  const [dropCoords, setDropCoords] = useState<Coords | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<Coords | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -41,23 +48,61 @@ const BookRide = () => {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Calculate distance when both locations are set
+  // Get current location on mount
   useEffect(() => {
-    const calculateDistance = async () => {
-      if (pickup.length < 5 || drop.length < 5) {
-        setDistanceResult(null);
-        return;
-      }
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCurrentLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        },
+        (err) => console.log("Geolocation not available:", err.message),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
 
+  // Use current location for pickup
+  const useCurrentLocationForPickup = useCallback(async () => {
+    if (!currentLocation) {
+      toast({ title: "Location unavailable", description: "Please enable location access", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${currentLocation.lat}&lon=${currentLocation.lon}&format=json`,
+        { headers: { 'User-Agent': 'LODR-App/1.0' } }
+      );
+      const data = await res.json();
+      const address = data.display_name || `${currentLocation.lat}, ${currentLocation.lon}`;
+      setPickup(address);
+      setPickupCoords(currentLocation);
+      toast({ title: "📍 Location set", description: "Using your current location as pickup" });
+    } catch {
+      setPickup(`${currentLocation.lat.toFixed(4)}, ${currentLocation.lon.toFixed(4)}`);
+      setPickupCoords(currentLocation);
+    }
+  }, [currentLocation, toast]);
+
+  // Calculate distance when both coords are set
+  useEffect(() => {
+    if (!pickupCoords || !dropCoords) {
+      setDistanceResult(null);
+      return;
+    }
+
+    const calculate = async () => {
       setIsCalculating(true);
       try {
         const { data, error } = await supabase.functions.invoke('calculate-distance', {
-          body: { origin: pickup, destination: drop }
+          body: {
+            originLat: pickupCoords.lat,
+            originLon: pickupCoords.lon,
+            destLat: dropCoords.lat,
+            destLon: dropCoords.lon,
+          }
         });
-
         if (error) throw error;
         if (data.error) throw new Error(data.error);
-
         setDistanceResult(data);
       } catch (err: any) {
         console.error('Distance calculation failed:', err);
@@ -67,83 +112,43 @@ const BookRide = () => {
       }
     };
 
-    // Debounce the calculation
-    const timer = setTimeout(calculateDistance, 500);
-    return () => clearTimeout(timer);
-  }, [pickup, drop]);
+    calculate();
+  }, [pickupCoords, dropCoords]);
 
-  // Calculate fare based on real distance
   const calculateFare = () => {
     if (!selectedVehicle || !distanceResult) return null;
     const vehicle = vehicles.find((v) => v.id === selectedVehicle);
     if (!vehicle) return null;
-
     const distance = distanceResult.distance.value;
     const fare = Math.round(vehicle.baseFare + distance * vehicle.perKm);
-    return { 
-      fare, 
-      distance, 
-      baseFare: vehicle.baseFare, 
-      perKm: vehicle.perKm,
-      duration: distanceResult.duration.text 
-    };
+    return { fare, distance, baseFare: vehicle.baseFare, perKm: vehicle.perKm, duration: distanceResult.duration.text };
   };
 
   const fareDetails = calculateFare();
 
+  const handlePickupChange = (value: string, coords?: { lat: number; lon: number }) => {
+    setPickup(value);
+    if (coords) setPickupCoords(coords);
+    else setPickupCoords(null);
+  };
+
+  const handleDropChange = (value: string, coords?: { lat: number; lon: number }) => {
+    setDrop(value);
+    if (coords) setDropCoords(coords);
+    else setDropCoords(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!pickup.trim()) {
-      toast({
-        title: "Missing pickup location",
-        description: "Please enter a pickup location",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!drop.trim()) {
-      toast({
-        title: "Missing drop location",
-        description: "Please enter a drop location",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!selectedVehicle) {
-      toast({
-        title: "No vehicle selected",
-        description: "Please select a vehicle type",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!distanceResult) {
-      toast({
-        title: "Calculating distance",
-        description: "Please wait while we calculate the distance",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!user) {
-      toast({
-        title: "Please login",
-        description: "You need to be logged in to book a ride",
-        variant: "destructive",
-      });
-      navigate("/auth");
-      return;
-    }
+    if (!pickup.trim()) { toast({ title: "Missing pickup location", description: "Please enter a pickup location", variant: "destructive" }); return; }
+    if (!drop.trim()) { toast({ title: "Missing drop location", description: "Please enter a drop location", variant: "destructive" }); return; }
+    if (!selectedVehicle) { toast({ title: "No vehicle selected", description: "Please select a vehicle type", variant: "destructive" }); return; }
+    if (!distanceResult) { toast({ title: "Calculating distance", description: "Please wait while we calculate the distance", variant: "destructive" }); return; }
+    if (!user) { toast({ title: "Please login", description: "You need to be logged in to book a ride", variant: "destructive" }); navigate("/auth"); return; }
 
     setIsSubmitting(true);
-
     try {
-      // Get random driver for simulation
       const driver = mockDrivers[Math.floor(Math.random() * mockDrivers.length)];
       const vehicleName = vehicles.find(v => v.id === selectedVehicle)?.name || selectedVehicle;
 
@@ -151,8 +156,8 @@ const BookRide = () => {
         .from("rides")
         .insert({
           user_id: user.id,
-          pickup: distanceResult.originAddress || pickup.trim(),
-          drop_location: distanceResult.destinationAddress || drop.trim(),
+          pickup: pickup.trim(),
+          drop_location: drop.trim(),
           vehicle_type: vehicleName,
           fare: fareDetails?.fare || 0,
           status: "requested",
@@ -165,19 +170,10 @@ const BookRide = () => {
         .single();
 
       if (error) throw error;
-
-      toast({
-        title: "Ride requested!",
-        description: "Finding nearby drivers for you...",
-      });
-
+      toast({ title: "Ride requested!", description: "Finding nearby drivers for you..." });
       navigate("/ride-status", { state: { rideId: data.id } });
     } catch (error: any) {
-      toast({
-        title: "Failed to book ride",
-        description: error.message || "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to book ride", description: error.message || "Something went wrong.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -186,45 +182,49 @@ const BookRide = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
-          {/* Header */}
-          <div className="mb-8 animate-fade-in">
+          <div className="mb-6 animate-fade-in">
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">Book a Ride</h1>
-            <p className="mt-1 text-muted-foreground">
-              Enter your locations and choose a vehicle
-            </p>
+            <p className="mt-1 text-muted-foreground">Enter your locations and choose a vehicle</p>
+          </div>
+
+          {/* Map Preview */}
+          <div className="mb-6 animate-fade-in">
+            <RouteMap
+              pickupCoords={pickupCoords}
+              dropCoords={dropCoords}
+              routeGeometry={distanceResult?.routeGeometry}
+              currentLocation={currentLocation}
+            />
           </div>
 
           <form onSubmit={handleSubmit}>
-            {/* Location Inputs */}
             <div className="p-6 rounded-xl bg-card border border-border shadow-card mb-6 animate-slide-up">
               <h2 className="font-semibold text-foreground mb-4">Where to?</h2>
-
               <div className="space-y-4">
                 <PlacesAutocomplete
                   value={pickup}
-                  onChange={setPickup}
+                  onChange={handlePickupChange}
                   placeholder="Pickup Location"
                   icon="pickup"
+                  showCurrentLocation
+                  onUseCurrentLocation={useCurrentLocationForPickup}
                 />
-
                 <PlacesAutocomplete
                   value={drop}
-                  onChange={setDrop}
+                  onChange={handleDropChange}
                   placeholder="Drop Location"
                   icon="drop"
                 />
               </div>
 
-              {/* Distance Info */}
               {(isCalculating || distanceResult) && (
                 <div className="mt-4 pt-4 border-t border-border">
                   {isCalculating ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Calculating distance...</span>
+                      <span className="text-sm">Calculating route...</span>
                     </div>
                   ) : distanceResult ? (
                     <div className="flex items-center justify-between text-sm">
@@ -232,9 +232,7 @@ const BookRide = () => {
                         <MapPin className="w-4 h-4" />
                         <span>{distanceResult.distance.text}</span>
                       </div>
-                      <span className="text-muted-foreground">
-                        ~{distanceResult.duration.text}
-                      </span>
+                      <span className="text-muted-foreground">~{distanceResult.duration.text}</span>
                     </div>
                   ) : null}
                 </div>
@@ -261,26 +259,19 @@ const BookRide = () => {
 
             {/* Fare Estimate */}
             {fareDetails && (
-              <div
-                className="p-6 rounded-xl bg-secondary/50 border border-border mb-6 animate-scale-in"
-              >
+              <div className="p-6 rounded-xl bg-secondary/50 border border-border mb-6 animate-scale-in">
                 <div className="flex items-center gap-2 mb-4">
                   <Calculator className="w-5 h-5 text-primary" />
                   <h2 className="font-semibold text-foreground">Fare Estimate</h2>
                 </div>
-
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Base Fare</span>
                     <span className="text-foreground">₹{fareDetails.baseFare}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Distance ({fareDetails.distance.toFixed(1)} km × ₹{fareDetails.perKm})
-                    </span>
-                    <span className="text-foreground">
-                      ₹{Math.round(fareDetails.distance * fareDetails.perKm)}
-                    </span>
+                    <span className="text-muted-foreground">Distance ({fareDetails.distance.toFixed(1)} km × ₹{fareDetails.perKm})</span>
+                    <span className="text-foreground">₹{Math.round(fareDetails.distance * fareDetails.perKm)}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Estimated time</span>
@@ -294,38 +285,14 @@ const BookRide = () => {
               </div>
             )}
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              variant="accent"
-              size="xl"
-              className="w-full animate-slide-up"
-              style={{ animationDelay: "100ms" }}
-              disabled={isSubmitting || isCalculating || !distanceResult}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  Booking...
-                </>
-              ) : (
-                <>
-                  Request Ride
-                  <ArrowRight className="w-5 h-5" />
-                </>
-              )}
+            <Button type="submit" variant="accent" size="xl" className="w-full animate-slide-up" style={{ animationDelay: "100ms" }} disabled={isSubmitting || isCalculating || !distanceResult}>
+              {isSubmitting ? (<><Loader2 className="w-5 h-5 animate-spin mr-2" />Booking...</>) : (<>Request Ride<ArrowRight className="w-5 h-5" /></>)}
             </Button>
 
             {!user && (
               <p className="mt-4 text-center text-sm text-muted-foreground">
                 You'll need to{" "}
-                <button
-                  type="button"
-                  onClick={() => navigate("/auth")}
-                  className="text-primary hover:underline"
-                >
-                  login or create an account
-                </button>{" "}
+                <button type="button" onClick={() => navigate("/auth")} className="text-primary hover:underline">login or create an account</button>{" "}
                 to book a ride
               </p>
             )}
