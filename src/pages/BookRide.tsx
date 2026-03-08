@@ -48,40 +48,46 @@ const BookRide = () => {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Get current location on mount
-  useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCurrentLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-        },
-        (err) => console.log("Geolocation not available:", err.message),
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    }
-  }, []);
-
-  // Use current location for pickup
-  const useCurrentLocationForPickup = useCallback(async () => {
-    if (!currentLocation) {
-      toast({ title: "Location unavailable", description: "Please enable location access", variant: "destructive" });
+  // Get current location - called directly from user click
+  const useCurrentLocationForPickup = useCallback(() => {
+    if (!("geolocation" in navigator)) {
+      toast({ title: "Location unavailable", description: "Your browser doesn't support geolocation", variant: "destructive" });
       return;
     }
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${currentLocation.lat}&lon=${currentLocation.lon}&format=json`,
-        { headers: { 'User-Agent': 'LODR-App/1.0' } }
-      );
-      const data = await res.json();
-      const address = data.display_name || `${currentLocation.lat}, ${currentLocation.lon}`;
-      setPickup(address);
-      setPickupCoords(currentLocation);
-      toast({ title: "📍 Location set", description: "Using your current location as pickup" });
-    } catch {
-      setPickup(`${currentLocation.lat.toFixed(4)}, ${currentLocation.lon.toFixed(4)}`);
-      setPickupCoords(currentLocation);
-    }
-  }, [currentLocation, toast]);
+
+    toast({ title: "📍 Locating...", description: "Getting your current position" });
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setCurrentLocation(coords);
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lon}&format=json`,
+            { headers: { 'User-Agent': 'LODR-App/1.0' } }
+          );
+          const data = await res.json();
+          const address = data.display_name || `${coords.lat}, ${coords.lon}`;
+          setPickup(address);
+          setPickupCoords(coords);
+          toast({ title: "📍 Location set", description: "Using your current location as pickup" });
+        } catch {
+          setPickup(`${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`);
+          setPickupCoords(coords);
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error.message);
+        if (error.code === error.PERMISSION_DENIED) {
+          toast({ title: "Permission denied", description: "Please allow location access in your browser settings", variant: "destructive" });
+        } else {
+          toast({ title: "Location unavailable", description: "Could not determine your position. Please try again.", variant: "destructive" });
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }, [toast]);
 
   // Calculate distance when both coords are set
   useEffect(() => {
