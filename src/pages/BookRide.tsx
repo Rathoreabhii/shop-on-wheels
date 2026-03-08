@@ -125,9 +125,37 @@ const BookRide = () => {
     if (!selectedVehicle || !distanceResult) return null;
     const vehicle = vehicles.find((v) => v.id === selectedVehicle);
     if (!vehicle) return null;
+
     const distance = distanceResult.distance.value;
-    const fare = Math.round(vehicle.baseFare + distance * vehicle.perKm);
-    return { fare, distance, baseFare: vehicle.baseFare, perKm: vehicle.perKm, duration: distanceResult.duration.text };
+    const durationMins = distanceResult.duration.value;
+
+    // Estimate waiting/traffic time: ~20% of travel time stuck in traffic for city routes
+    const trafficFactor = distance < 5 ? 0.25 : distance < 15 ? 0.2 : 0.15;
+    const estimatedWaitingMins = Math.round(durationMins * trafficFactor);
+
+    const distanceCharge = Math.round(distance * vehicle.perKm);
+    const waitingCharge = Math.round(estimatedWaitingMins * (vehicle.waitingPerMin || 0));
+    const subtotal = vehicle.baseFare + distanceCharge + waitingCharge;
+
+    // Platform fee (flat ₹10) + GST 5%
+    const platformFee = 10;
+    const gst = Math.round(subtotal * 0.05);
+    const totalFare = subtotal + platformFee + gst;
+
+    return {
+      fare: totalFare,
+      distance,
+      baseFare: vehicle.baseFare,
+      perKm: vehicle.perKm,
+      distanceCharge,
+      waitingMins: estimatedWaitingMins,
+      waitingPerMin: vehicle.waitingPerMin || 0,
+      waitingCharge,
+      platformFee,
+      gst,
+      duration: distanceResult.duration.text,
+      durationMins,
+    };
   };
 
   const fareDetails = calculateFare();
