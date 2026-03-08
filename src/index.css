@@ -166,3 +166,18 @@
     transform: scale(1);
   }
 }
+
+/* Leaflet tooltip styling */
+.map-tooltip {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px hsl(220 20% 10% / 0.15);
+}
+.map-tooltip::before {
+  border-top-color: hsl(var(--border)) !important;
+}
