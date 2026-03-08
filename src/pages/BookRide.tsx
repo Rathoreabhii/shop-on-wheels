@@ -125,9 +125,37 @@ const BookRide = () => {
     if (!selectedVehicle || !distanceResult) return null;
     const vehicle = vehicles.find((v) => v.id === selectedVehicle);
     if (!vehicle) return null;
+
     const distance = distanceResult.distance.value;
-    const fare = Math.round(vehicle.baseFare + distance * vehicle.perKm);
-    return { fare, distance, baseFare: vehicle.baseFare, perKm: vehicle.perKm, duration: distanceResult.duration.text };
+    const durationMins = distanceResult.duration.value;
+
+    // Estimate waiting/traffic time: ~20% of travel time stuck in traffic for city routes
+    const trafficFactor = distance < 5 ? 0.25 : distance < 15 ? 0.2 : 0.15;
+    const estimatedWaitingMins = Math.round(durationMins * trafficFactor);
+
+    const distanceCharge = Math.round(distance * vehicle.perKm);
+    const waitingCharge = Math.round(estimatedWaitingMins * (vehicle.waitingPerMin || 0));
+    const subtotal = vehicle.baseFare + distanceCharge + waitingCharge;
+
+    // Platform fee (flat ₹10) + GST 5%
+    const platformFee = 10;
+    const gst = Math.round(subtotal * 0.05);
+    const totalFare = subtotal + platformFee + gst;
+
+    return {
+      fare: totalFare,
+      distance,
+      baseFare: vehicle.baseFare,
+      perKm: vehicle.perKm,
+      distanceCharge,
+      waitingMins: estimatedWaitingMins,
+      waitingPerMin: vehicle.waitingPerMin || 0,
+      waitingCharge,
+      platformFee,
+      gst,
+      duration: distanceResult.duration.text,
+      durationMins,
+    };
   };
 
   const fareDetails = calculateFare();
@@ -277,10 +305,24 @@ const BookRide = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Distance ({fareDetails.distance.toFixed(1)} km × ₹{fareDetails.perKm})</span>
-                    <span className="text-foreground">₹{Math.round(fareDetails.distance * fareDetails.perKm)}</span>
+                    <span className="text-foreground">₹{fareDetails.distanceCharge}</span>
+                  </div>
+                  {fareDetails.waitingCharge > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Traffic waiting (~{fareDetails.waitingMins} min × ₹{fareDetails.waitingPerMin})</span>
+                      <span className="text-foreground">₹{fareDetails.waitingCharge}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Platform fee</span>
+                    <span className="text-foreground">₹{fareDetails.platformFee}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GST (5%)</span>
+                    <span className="text-foreground">₹{fareDetails.gst}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Estimated time</span>
+                    <span>Estimated travel time</span>
                     <span>{fareDetails.duration}</span>
                   </div>
                   <div className="pt-3 border-t border-border flex justify-between">
