@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 const vehicleIcons = {
-  auto: Bike,
+  bike: Zap,
   tempo: Truck,
   "mini-truck": Package,
 };
