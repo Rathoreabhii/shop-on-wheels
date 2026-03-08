@@ -15,7 +15,9 @@ const RouteMap = ({ pickupCoords, dropCoords, routeGeometry, currentLocation }: 
   const pickupMarkerRef = useRef<L.CircleMarker | null>(null);
   const dropMarkerRef = useRef<L.CircleMarker | null>(null);
   const currentLocMarkerRef = useRef<L.CircleMarker | null>(null);
+  const currentLocPulseRef = useRef<L.Circle | null>(null);
   const routeLayerRef = useRef<L.GeoJSON | null>(null);
+  const hasAutoZoomedRef = useRef(false);
 
   // Initialize map
   useEffect(() => {
@@ -24,7 +26,7 @@ const RouteMap = ({ pickupCoords, dropCoords, routeGeometry, currentLocation }: 
     const map = L.map(mapContainerRef.current, {
       zoomControl: false,
       attributionControl: false,
-    }).setView([20.5937, 78.9629], 5); // India center
+    }).setView([20.5937, 78.9629], 5);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -43,25 +45,59 @@ const RouteMap = ({ pickupCoords, dropCoords, routeGeometry, currentLocation }: 
     };
   }, []);
 
-  // Update markers and route
+  // Auto-zoom to current location on first load
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !currentLocation || hasAutoZoomedRef.current) return;
+    if (!pickupCoords && !dropCoords) {
+      map.setView([currentLocation.lat, currentLocation.lon], 15, { animate: true });
+      hasAutoZoomedRef.current = true;
+    }
+  }, [currentLocation, pickupCoords, dropCoords]);
+
+  // Always render the current location blue dot
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear old markers
+    // Remove old current loc markers
+    if (currentLocMarkerRef.current) { currentLocMarkerRef.current.remove(); currentLocMarkerRef.current = null; }
+    if (currentLocPulseRef.current) { currentLocPulseRef.current.remove(); currentLocPulseRef.current = null; }
+
+    if (currentLocation) {
+      // Accuracy circle (light blue pulse)
+      currentLocPulseRef.current = L.circle([currentLocation.lat, currentLocation.lon], {
+        radius: 80,
+        fillColor: '#3b82f6',
+        fillOpacity: 0.12,
+        color: '#3b82f6',
+        weight: 1,
+        opacity: 0.3,
+        interactive: false,
+      }).addTo(map);
+
+      // Blue dot
+      currentLocMarkerRef.current = L.circleMarker([currentLocation.lat, currentLocation.lon], {
+        radius: 8,
+        fillColor: '#3b82f6',
+        fillOpacity: 1,
+        color: '#ffffff',
+        weight: 3,
+      }).addTo(map).bindTooltip("You are here", { permanent: false, direction: 'top' });
+    }
+  }, [currentLocation]);
+
+  // Update pickup/drop markers and route
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear old route markers (not current location)
     if (pickupMarkerRef.current) { pickupMarkerRef.current.remove(); pickupMarkerRef.current = null; }
     if (dropMarkerRef.current) { dropMarkerRef.current.remove(); dropMarkerRef.current = null; }
-    if (currentLocMarkerRef.current) { currentLocMarkerRef.current.remove(); currentLocMarkerRef.current = null; }
     if (routeLayerRef.current) { routeLayerRef.current.remove(); routeLayerRef.current = null; }
 
     const bounds: L.LatLngExpression[] = [];
-
-    // Current location marker (blue pulse)
-    if (currentLocation) {
-      currentLocMarkerRef.current = L.circleMarker([currentLocation.lat, currentLocation.lon], {
-        radius: 8, fillColor: '#3b82f6', fillOpacity: 0.9, color: '#fff', weight: 3,
-      }).addTo(map).bindTooltip("You", { permanent: false });
-    }
 
     // Pickup marker (green)
     if (pickupCoords) {
@@ -88,13 +124,11 @@ const RouteMap = ({ pickupCoords, dropCoords, routeGeometry, currentLocation }: 
 
     // Fit bounds
     if (bounds.length === 2) {
-      map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+      map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50], animate: true });
     } else if (bounds.length === 1) {
-      map.setView(bounds[0] as L.LatLngExpression, 14);
-    } else if (currentLocation) {
-      map.setView([currentLocation.lat, currentLocation.lon], 14);
+      map.setView(bounds[0] as L.LatLngExpression, 14, { animate: true });
     }
-  }, [pickupCoords, dropCoords, routeGeometry, currentLocation]);
+  }, [pickupCoords, dropCoords, routeGeometry]);
 
   return (
     <div className="relative w-full h-64 md:h-80 rounded-xl overflow-hidden border border-border shadow-card">
