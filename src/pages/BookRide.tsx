@@ -43,14 +43,12 @@ const BookRide = () => {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Get current location - called directly from user click
-  const useCurrentLocationForPickup = useCallback(() => {
+  // Get current location
+  const fetchCurrentLocation = useCallback(() => {
     if (!("geolocation" in navigator)) {
       toast({ title: "Location unavailable", description: "Your browser doesn't support geolocation", variant: "destructive" });
       return;
     }
-
-    toast({ title: "📍 Locating...", description: "Getting your current position" });
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -66,7 +64,6 @@ const BookRide = () => {
           const address = data.display_name || `${coords.lat}, ${coords.lon}`;
           setPickup(address);
           setPickupCoords(coords);
-          toast({ title: "📍 Location set", description: "Using your current location as pickup" });
         } catch {
           setPickup(`${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`);
           setPickupCoords(coords);
@@ -74,15 +71,20 @@ const BookRide = () => {
       },
       (error) => {
         console.error("Geolocation error:", error.message);
-        if (error.code === error.PERMISSION_DENIED) {
-          toast({ title: "Permission denied", description: "Please allow location access in your browser settings", variant: "destructive" });
-        } else {
-          toast({ title: "Location unavailable", description: "Could not determine your position. Please try again.", variant: "destructive" });
-        }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, [toast]);
+
+  // Auto-detect current location on mount
+  useEffect(() => {
+    fetchCurrentLocation();
+  }, [fetchCurrentLocation]);
+
+  const useCurrentLocationForPickup = useCallback(() => {
+    toast({ title: "📍 Locating...", description: "Getting your current position" });
+    fetchCurrentLocation();
+  }, [toast, fetchCurrentLocation]);
 
   // Calculate distance when both coords are set
   useEffect(() => {

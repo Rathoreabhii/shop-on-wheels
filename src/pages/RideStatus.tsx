@@ -1,22 +1,29 @@
-import { useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { MapPin, Phone, Star, Truck, ArrowLeft, CheckCircle, Search, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { MapPin, Phone, Star, Truck, ArrowLeft, CheckCircle, Search, Loader2, XCircle, Clock, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import Navbar from "@/components/Navbar";
 import StatusStepper from "@/components/StatusStepper";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 const RideStatus = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const rideId = location.state?.rideId;
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const steps = ["Pending", "Driver Assigned", "Picked Up", "Delivered"];
 
-  // Fetch specific ride or latest ride
+  // Fetch specific ride or latest active ride
   const { data: ride, isLoading } = useQuery({
     queryKey: ["ride", rideId, user?.id],
     queryFn: async () => {
@@ -30,7 +37,7 @@ const RideStatus = () => {
       if (rideId) {
         query = query.eq("id", rideId);
       } else {
-        query = query.order("created_at", { ascending: false }).limit(1);
+        query = query.not("status", "in", '("delivered","cancelled")').order("created_at", { ascending: false }).limit(1);
       }
 
       const { data, error } = await query.maybeSingle();
@@ -83,6 +90,28 @@ const RideStatus = () => {
     };
   }, [ride?.id, rideId, user?.id, queryClient]);
 
+  const handleCancelRide = async () => {
+    if (!ride) return;
+    setIsCancelling(true);
+    try {
+      const { error } = await supabase
+        .from("rides")
+        .update({ status: "cancelled" })
+        .eq("id", ride.id)
+        .eq("user_id", user!.id);
+
+      if (error) throw error;
+
+      toast({ title: "Ride cancelled", description: "Your ride has been cancelled successfully." });
+      queryClient.invalidateQueries({ queryKey: ["ride", rideId, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["rideHistory", user?.id] });
+    } catch (err: any) {
+      toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   // Map status to step number
   const statusToStep: Record<string, number> = {
     pending: 1,
@@ -93,6 +122,27 @@ const RideStatus = () => {
 
   const currentStep = ride ? statusToStep[ride.status] || 1 : 1;
   const isWaitingForDriver = ride?.status === "pending";
+  const isCancelled = ride?.status === "cancelled";
+  const canCancel = ride && ["pending", "accepted"].includes(ride.status);
+
+  // Filter ride history
+  const filteredHistory = rideHistory.filter((r) => {
+    const matchesSearch = searchQuery === "" || 
+      r.pickup.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.drop_location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.vehicle_type.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-warning/10 text-warning",
+    accepted: "bg-accent/10 text-accent",
+    picked_up: "bg-primary/10 text-primary",
+    delivered: "bg-success/10 text-success",
+    cancelled: "bg-destructive/10 text-destructive",
+    requested: "bg-accent/10 text-accent",
+  };
 
   if (isLoading) {
     return (
@@ -138,7 +188,7 @@ const RideStatus = () => {
             Back to Dashboard
           </Link>
 
-          {ride && (
+          {ride && !isCancelled && (
             <>
               {/* Header */}
               <div className="mb-8 animate-fade-in">
@@ -160,12 +210,10 @@ const RideStatus = () => {
               {isWaitingForDriver && (
                 <div className="p-8 rounded-xl bg-card border border-border shadow-card mb-6 animate-fade-in">
                   <div className="flex flex-col items-center text-center">
-                    {/* Animated searching icon */}
                     <div className="relative mb-6">
                       <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
                         <Search className="w-10 h-10 text-primary" />
                       </div>
-                      {/* Pulsing rings */}
                       <div className="absolute inset-0 w-24 h-24 rounded-full border-2 border-primary/30 animate-ping" />
                       <div className="absolute -inset-3 w-30 h-30 rounded-full border border-primary/15 animate-pulse" />
                     </div>
@@ -182,7 +230,6 @@ const RideStatus = () => {
                       <span>Searching...</span>
                     </div>
 
-                    {/* Ride summary while waiting */}
                     <div className="mt-6 pt-6 border-t border-border w-full">
                       <div className="flex items-center justify-between text-sm">
                         <div className="text-left">
@@ -200,6 +247,21 @@ const RideStatus = () => {
                         <span className="font-semibold text-primary">₹{ride.fare}</span>
                       </div>
                     </div>
+
+                    {/* Cancel Button */}
+                    <Button
+                      variant="outline"
+                      className="mt-6 text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={handleCancelRide}
+                      disabled={isCancelling}
+                    >
+                      {isCancelling ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <XCircle className="w-4 h-4 mr-2" />
+                      )}
+                      {isCancelling ? "Cancelling..." : "Cancel Ride"}
+                    </Button>
                   </div>
                 </div>
               )}
@@ -218,7 +280,6 @@ const RideStatus = () => {
                   style={{ animationDelay: "50ms" }}
                 >
                   <h2 className="font-semibold text-foreground mb-4">Booking Details</h2>
-
                   <div className="space-y-4">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
@@ -229,7 +290,6 @@ const RideStatus = () => {
                         <p className="font-medium text-foreground">{ride.pickup}</p>
                       </div>
                     </div>
-
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
                         <MapPin className="w-4 h-4 text-accent" />
@@ -239,7 +299,6 @@ const RideStatus = () => {
                         <p className="font-medium text-foreground">{ride.drop_location}</p>
                       </div>
                     </div>
-
                     <div className="pt-4 border-t border-border flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -256,19 +315,31 @@ const RideStatus = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Cancel button for accepted rides */}
+                  {canCancel && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <Button
+                        variant="outline"
+                        className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={handleCancelRide}
+                        disabled={isCancelling}
+                      >
+                        {isCancelling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
+                        {isCancelling ? "Cancelling..." : "Cancel Ride"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Driver Info - only show when driver is assigned */}
+              {/* Driver Info */}
               {ride.driver_name && !isWaitingForDriver && (
                 <div className="p-6 rounded-xl bg-card border border-border shadow-card animate-scale-in">
                   <h2 className="font-semibold text-foreground mb-4">Driver Information</h2>
-
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xl font-bold text-primary">
-                        {ride.driver_name.charAt(0)}
-                      </span>
+                      <span className="text-xl font-bold text-primary">{ride.driver_name.charAt(0)}</span>
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -280,12 +351,9 @@ const RideStatus = () => {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {ride.vehicle_number}
-                      </p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{ride.vehicle_number}</p>
                     </div>
                   </div>
-
                   {ride.driver_phone && (
                     <div className="mt-4 pt-4 border-t border-border">
                       <Button variant="accent" className="w-full" asChild>
@@ -313,41 +381,93 @@ const RideStatus = () => {
             </>
           )}
 
-          {/* Ride History */}
-          {rideHistory.length > 1 && (
+          {/* Cancelled ride message */}
+          {ride && isCancelled && (
+            <div className="p-8 rounded-xl bg-card border border-border shadow-card mb-6 animate-fade-in text-center">
+              <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-foreground mb-2">Ride Cancelled</h2>
+              <p className="text-muted-foreground text-sm mb-2">
+                {ride.pickup} → {ride.drop_location}
+              </p>
+              <p className="text-muted-foreground text-sm mb-6">
+                {ride.vehicle_type} • ₹{ride.fare}
+              </p>
+              <Button variant="accent" asChild>
+                <Link to="/book-ride">Book a New Ride</Link>
+              </Button>
+            </div>
+          )}
+
+          {/* Ride History with Search */}
+          {rideHistory.length > 0 && (
             <div className="mt-10">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Ride History</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  Ride History
+                </h2>
+                <span className="text-sm text-muted-foreground">{rideHistory.length} rides</span>
+              </div>
+
+              {/* Search & Filter */}
+              <div className="flex gap-3 mb-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by location or vehicle..."
+                    className="pl-9 h-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="h-10 px-3 rounded-md border border-input bg-background text-sm text-foreground"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="picked_up">Picked Up</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
               <div className="space-y-3">
-                {rideHistory.slice(1, 6).map((pastRide) => (
-                  <div
-                    key={pastRide.id}
-                    className="p-4 rounded-xl bg-card border border-border hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => window.location.reload()}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-foreground text-sm">
-                          {pastRide.pickup} → {pastRide.drop_location}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {pastRide.vehicle_type} • {new Date(pastRide.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-foreground">₹{pastRide.fare}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          pastRide.status === "delivered" 
-                            ? "bg-success/10 text-success" 
-                            : pastRide.status === "pending"
-                            ? "bg-warning/10 text-warning"
-                            : "bg-accent/10 text-accent"
-                        }`}>
-                          {pastRide.status}
-                        </span>
+                {filteredHistory.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    No rides match your search.
+                  </div>
+                ) : (
+                  filteredHistory.map((pastRide) => (
+                    <div
+                      key={pastRide.id}
+                      className="p-4 rounded-xl bg-card border border-border hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => navigate("/ride-status", { state: { rideId: pastRide.id } })}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0 flex-1 mr-3">
+                          <p className="font-medium text-foreground text-sm truncate">
+                            {pastRide.pickup}
+                          </p>
+                          <p className="font-medium text-foreground text-sm truncate mt-0.5">
+                            → {pastRide.drop_location}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {pastRide.vehicle_type} • {new Date(pastRide.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-semibold text-foreground">₹{pastRide.fare}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[pastRide.status] || "bg-muted text-muted-foreground"}`}>
+                            {pastRide.status}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           )}
