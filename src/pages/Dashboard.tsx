@@ -46,8 +46,8 @@ const Dashboard = () => {
   });
 
   const totalRides = rides.length;
-  const completedRides = rides.filter(r => r.status === "completed").length;
-  const activeRides = rides.filter(r => r.status !== "completed");
+  const completedRides = rides.filter(r => r.status === "delivered").length;
+  const activeRides = rides.filter(r => !["delivered", "cancelled"].includes(r.status));
   const activeRide = activeRides[0];
   const totalSpent = rides.reduce((sum, r) => sum + (r.fare || 0), 0);
 
