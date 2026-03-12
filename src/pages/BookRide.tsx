@@ -17,11 +17,6 @@ const vehicleIcons = {
   "mini-truck": Package,
 };
 
-const mockDrivers = [
-  { name: "Ramesh Kumar", phone: "+91 98765 43210", vehicleNumber: "DL 4C AB 1234", rating: 4.8 },
-  { name: "Suresh Sharma", phone: "+91 98765 54321", vehicleNumber: "DL 3C XY 5678", rating: 4.6 },
-  { name: "Vikram Singh", phone: "+91 98765 65432", vehicleNumber: "DL 2C MN 9012", rating: 4.9 },
-];
 
 interface DistanceResult {
   distance: { value: number; text: string };
