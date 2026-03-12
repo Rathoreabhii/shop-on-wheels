@@ -36,7 +36,7 @@ const PlacesAutocomplete = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const fetchPredictions = useCallback(async (input: string) => {
     if (input.length < 3) {
