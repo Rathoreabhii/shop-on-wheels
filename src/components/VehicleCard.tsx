@@ -7,9 +7,11 @@ interface VehicleCardProps {
   capacity: string;
   isSelected?: boolean;
   onSelect: () => void;
+  estimatedFare?: number | null;
+  estimatedDistance?: string | null;
 }
 
-const VehicleCard = ({ name, icon: Icon, baseFare, capacity, isSelected, onSelect }: VehicleCardProps) => {
+const VehicleCard = ({ name, icon: Icon, baseFare, capacity, isSelected, onSelect, estimatedFare, estimatedDistance }: VehicleCardProps) => {
   return (
     <button
       onClick={onSelect}
@@ -32,8 +34,17 @@ const VehicleCard = ({ name, icon: Icon, baseFare, capacity, isSelected, onSelec
           <p className="text-sm text-muted-foreground">{capacity}</p>
         </div>
         <div className="text-right">
-          <p className="text-lg font-bold text-foreground">₹{baseFare}</p>
-          <p className="text-xs text-muted-foreground">base fare</p>
+          {estimatedFare != null ? (
+            <>
+              <p className="text-lg font-bold text-primary">₹{estimatedFare}</p>
+              <p className="text-xs text-muted-foreground">{estimatedDistance || "est. total"}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-bold text-foreground">₹{baseFare}</p>
+              <p className="text-xs text-muted-foreground">base fare</p>
+            </>
+          )}
         </div>
       </div>
       {isSelected && (
