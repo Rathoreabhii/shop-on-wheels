@@ -121,15 +121,14 @@ const BookRide = () => {
     calculate();
   }, [pickupCoords, dropCoords]);
 
-  const calculateFare = () => {
-    if (!selectedVehicle || !distanceResult) return null;
-    const vehicle = vehicles.find((v) => v.id === selectedVehicle);
+  const calculateFareForVehicle = (vehicleId: string) => {
+    if (!distanceResult) return null;
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
     if (!vehicle) return null;
 
     const distance = distanceResult.distance.value;
     const durationMins = distanceResult.duration.value;
 
-    // Estimate waiting/traffic time: ~20% of travel time stuck in traffic for city routes
     const trafficFactor = distance < 5 ? 0.25 : distance < 15 ? 0.2 : 0.15;
     const estimatedWaitingMins = Math.round(durationMins * trafficFactor);
 
@@ -137,7 +136,6 @@ const BookRide = () => {
     const waitingCharge = Math.round(estimatedWaitingMins * (vehicle.waitingPerMin || 0));
     const subtotal = vehicle.baseFare + distanceCharge + waitingCharge;
 
-    // Platform fee (flat ₹10) + GST 5%
     const platformFee = 10;
     const gst = Math.round(subtotal * 0.05);
     const totalFare = subtotal + platformFee + gst;
@@ -158,7 +156,12 @@ const BookRide = () => {
     };
   };
 
-  const fareDetails = calculateFare();
+  // Pre-compute fares for all vehicles
+  const allFares = distanceResult
+    ? Object.fromEntries(vehicles.map((v) => [v.id, calculateFareForVehicle(v.id)]))
+    : {};
+
+  const fareDetails = selectedVehicle ? (allFares[selectedVehicle] || null) : null;
 
   const handlePickupChange = (value: string, coords?: { lat: number; lon: number }) => {
     setPickup(value);
