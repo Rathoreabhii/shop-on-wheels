@@ -280,17 +280,22 @@ const BookRide = () => {
             <div className="mb-6 animate-slide-up" style={{ animationDelay: "50ms" }}>
               <h2 className="font-semibold text-foreground mb-4">Select Vehicle</h2>
               <div className="space-y-3">
-                {vehicles.map((vehicle) => (
-                  <VehicleCard
-                    key={vehicle.id}
-                    name={vehicle.name}
-                    icon={vehicleIcons[vehicle.id as keyof typeof vehicleIcons]}
-                    baseFare={vehicle.baseFare}
-                    capacity={vehicle.capacity}
-                    isSelected={selectedVehicle === vehicle.id}
-                    onSelect={() => setSelectedVehicle(vehicle.id)}
-                  />
-                ))}
+                {vehicles.map((vehicle) => {
+                  const vFare = allFares[vehicle.id];
+                  return (
+                    <VehicleCard
+                      key={vehicle.id}
+                      name={vehicle.name}
+                      icon={vehicleIcons[vehicle.id as keyof typeof vehicleIcons]}
+                      baseFare={vehicle.baseFare}
+                      capacity={vehicle.capacity}
+                      isSelected={selectedVehicle === vehicle.id}
+                      onSelect={() => setSelectedVehicle(vehicle.id)}
+                      estimatedFare={vFare?.fare ?? null}
+                      estimatedDistance={distanceResult?.distance.text ?? null}
+                    />
+                  );
+                })}
               </div>
             </div>
 
