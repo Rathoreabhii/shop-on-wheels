@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      drivers: {
+        Row: {
+          created_at: string
+          current_lat: number | null
+          current_lng: number | null
+          id: string
+          is_available: boolean | null
+          license_number: string | null
+          name: string
+          phone: string
+          rating: number | null
+          total_earnings: number | null
+          total_rides: number | null
+          updated_at: string
+          user_id: string
+          vehicle_number: string | null
+          vehicle_type: string
+        }
+        Insert: {
+          created_at?: string
+          current_lat?: number | null
+          current_lng?: number | null
+          id?: string
+          is_available?: boolean | null
+          license_number?: string | null
+          name: string
+          phone: string
+          rating?: number | null
+          total_earnings?: number | null
+          total_rides?: number | null
+          updated_at?: string
+          user_id: string
+          vehicle_number?: string | null
+          vehicle_type?: string
+        }
+        Update: {
+          created_at?: string
+          current_lat?: number | null
+          current_lng?: number | null
+          id?: string
+          is_available?: boolean | null
+          license_number?: string | null
+          name?: string
+          phone?: string
+          rating?: number | null
+          total_earnings?: number | null
+          total_rides?: number | null
+          updated_at?: string
+          user_id?: string
+          vehicle_number?: string | null
+          vehicle_type?: string
+        }
+        Relationships: []
+      }
       phone_otp: {
         Row: {
           action: string | null
@@ -77,6 +131,7 @@ export type Database = {
       rides: {
         Row: {
           created_at: string
+          driver_id: string | null
           driver_name: string | null
           driver_phone: string | null
           driver_rating: number | null
@@ -92,6 +147,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          driver_id?: string | null
           driver_name?: string | null
           driver_phone?: string | null
           driver_rating?: number | null
@@ -107,6 +163,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          driver_id?: string | null
           driver_name?: string | null
           driver_phone?: string | null
           driver_rating?: number | null
@@ -120,7 +177,15 @@ export type Database = {
           vehicle_number?: string | null
           vehicle_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rides_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
