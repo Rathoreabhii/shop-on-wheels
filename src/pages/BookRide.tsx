@@ -181,7 +181,6 @@ const BookRide = () => {
 
     setIsSubmitting(true);
     try {
-      const driver = mockDrivers[Math.floor(Math.random() * mockDrivers.length)];
       const vehicleName = vehicles.find(v => v.id === selectedVehicle)?.name || selectedVehicle;
 
       const { data, error } = await supabase
@@ -192,11 +191,7 @@ const BookRide = () => {
           drop_location: drop.trim(),
           vehicle_type: vehicleName,
           fare: fareDetails?.fare || 0,
-          status: "requested",
-          driver_name: driver.name,
-          driver_phone: driver.phone,
-          vehicle_number: driver.vehicleNumber,
-          driver_rating: driver.rating,
+          status: "pending",
         })
         .select()
         .single();
